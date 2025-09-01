@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'preact/hooks';
 import { dateParser } from "@biswarup598/date-parser";
 import { GoogleGenAI } from "@google/genai";
+import FaqSkeleton from './skeleton';
+import type { Faq } from '../types/faq';
+import axios from 'axios';
+import { api } from '../api';
 
 export default function ChatWidget() {
     const [showBot, setShowBot] = useState(true);
@@ -9,12 +13,15 @@ export default function ChatWidget() {
     const [openChat, setOpenChat] = useState(false);
     const [openAgent, setOpenAgent] = useState(false);
     const [messages, setMessages] = useState([
-        { id: 1,type: 'bot', text: 'Hi! How can I help you?', time: dateParser(Date.now())[1], isLoading: false }
+        { id: 1, type: 'bot', text: 'Hi! How can I help you?', time: dateParser(Date.now())[1], isLoading: false }
     ]);
     const [inputValue, setInputValue] = useState('');
-    const key = import.meta.env.VITE_KEY;
+    const [faqLoading, setFaqLoading] = useState(true);
+    const [faqDepth, setFaqDepth] = useState(0);
 
-    const ai = new GoogleGenAI({ apiKey: key});
+
+    const key = import.meta.env.VITE_KEY;
+    const ai = new GoogleGenAI({ apiKey: key });
 
     async function chat() {
         const response = await ai.models.generateContent({
@@ -22,29 +29,25 @@ export default function ChatWidget() {
             contents: inputValue,
         });
         return response.text;
-        // console.log(response.text);
     }
 
     async function fetchFaqs() {
-        await fetch("https://localhost:5001/api/Chat/rootquestion", {
-            headers:
-                { Authorization: `Bearer ${import.meta.env.VITE_TOKEN}` }
-        })
-            .then(res => res.json())
-            .then(data => { setFaqs(data.result);  console.log(data.result)})
+        await api.get("/Chat/rootquestion")
+            .then(res => { setFaqs(res.data.result); setFaqLoading(false); setFaqDepth(0); })
             .catch(err => console.log(err));
     }
 
-    async function fetchFaqByQuestion(question:string) {
-        await fetch(`https://localhost:5001/api/Chat/GetbyQuestion?question=${question}`, {
-            method: "POST",
-            headers:
-                { Authorization: `Bearer ${import.meta.env.VITE_TOKEN}` }
-        })
-            .then(res => res.json())
-            .then(data => setFaqs(data.result.bot.options))
+    async function fetchFaqByQuestion(question: string) {
+        await api.post(`/Chat/GetbyQuestion?question=${question}`,{})
+            .then(res => { setFaqs(res.data.result.bot.options); setFaqLoading(false); setFaqDepth(prev => prev + 1); })
             .catch(err => console.log(err));
     }
+
+    const handleFaqBackToStart = () => {
+        setFaqLoading(true);
+        setFaqDepth(0);
+        fetchFaqs();
+    };
 
     const handleOpen = () => setOpen(prev => !prev);
 
@@ -53,6 +56,7 @@ export default function ChatWidget() {
         setOpenFaq(true);
         setOpenChat(false);
         setOpenAgent(false);
+        fetchFaqs();
         fetchFaqs();
     };
 
@@ -72,17 +76,10 @@ export default function ChatWidget() {
         setShowBot(false);
     };
 
-    // const faqs = [
-    //     'How do I apply?',
-    //     'What courses do you offer?',
-    //     'When do applications close?',
-    //     'Where is the campus located?',
-    //     'Ask something else'
-    // ];
-
     const [faqs, setFaqs] = useState<Faq[]>([]);
 
     useEffect(() => {
+        // fetchFaqs();
         // fetchFaqs();
 
         let payload =
@@ -110,8 +107,8 @@ export default function ChatWidget() {
         const loaderId = Date.now() + 1;
         const loadingMessage = { id: loaderId, type: 'bot', text: "", time: dateParser(Date.now())[1], isLoading: true };
         setMessages(prev => [...prev, loadingMessage]);
-        
-            chat().then((res) => {
+
+        chat().then((res) => {
             // setBotResponse(res)
             setMessages(prev =>
                 prev.map(msg =>
@@ -121,7 +118,7 @@ export default function ChatWidget() {
                 )
             );
         });
-        
+
     };
 
     return (
@@ -198,11 +195,25 @@ export default function ChatWidget() {
             {/* FAQ Section */}
             {openFaq && !open && (
                 <div className="faq-box">
+                    
                     <div className="faq-options">
                         <ul className="faq-options-li">
-                            {faqs.map((faq, index) => (
-                                <li key={index} onClick={()=>fetchFaqByQuestion(faq.question)}>{faq.question}</li>
+
+
+
+                            {faqLoading ? <FaqSkeleton /> : faqs.map((faq, index) => (
+                                <li key={index} onClick={() => fetchFaqByQuestion(faq.question)}>{faq.question}</li>
                             ))}
+
+                            <div className="faq-header">
+
+                                {faqDepth > 0 && (
+                                    <button className="back-to-start" onClick={handleFaqBackToStart} aria-label="Back to start">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
+                                        <span>Back to Start</span>
+                                    </button>
+                                )}
+                            </div>
                             <div
                                 id="talk-btn"
                                 onClick={handleOpenAgent}
@@ -215,7 +226,7 @@ export default function ChatWidget() {
                 </div>
             )}
 
-            {/* c    Dynamic Chat Section */}
+            {/* Dynamic Chat Section */}
             {openChat && !open && (
                 <div className="chat-dialog fly-x">
                     <div className="chat-header">
@@ -268,7 +279,6 @@ export default function ChatWidget() {
                             ))}
                         </div>
 
-                        {/* Input & Send */}
                         <div className="input">
                             <input
                                 type="text"
@@ -324,11 +334,6 @@ export default function ChatWidget() {
                                 Thanks for joining us! Let's start by getting
                                 your name.
                             </p>
-                            {/* <ul className="agent-user-msg">
-                                {users.map((user, index) => (
-                                    <li key={index}>{user.name}</li>
-                                ))}
-                            </ul> */}
                             <div className="messages">
                                 {messages.map((msg, index) => (
                                     <p
