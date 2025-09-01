@@ -8,12 +8,10 @@ export default function ChatWidget() {
     const [openFaq, setOpenFaq] = useState(false);
     const [openChat, setOpenChat] = useState(false);
     const [openAgent, setOpenAgent] = useState(false);
-    const [users, setUsers] = useState([{ name: 'John' }]);
     const [messages, setMessages] = useState([
         { id: 1,type: 'bot', text: 'Hi! How can I help you?', time: dateParser(Date.now())[1], isLoading: false }
     ]);
     const [inputValue, setInputValue] = useState('');
-    const [botResponseText, setBotResponse] = useState("I'm here to assist you with that!");
     const key = import.meta.env.VITE_KEY;
 
     const ai = new GoogleGenAI({ apiKey: key});
@@ -30,7 +28,7 @@ export default function ChatWidget() {
     async function fetchFaqs() {
         await fetch("https://localhost:5001/api/Chat/rootquestion", {
             headers:
-                { Authorization: "Bearer " }
+                { Authorization: `Bearer ${import.meta.env.VITE_TOKEN}` }
         })
             .then(res => res.json())
             .then(data => { setFaqs(data.result);  console.log(data.result)})
@@ -41,7 +39,7 @@ export default function ChatWidget() {
         await fetch(`https://localhost:5001/api/Chat/GetbyQuestion?question=${question}`, {
             method: "POST",
             headers:
-                { Authorization: "Bearer " }
+                { Authorization: `Bearer ${import.meta.env.VITE_TOKEN}` }
         })
             .then(res => res.json())
             .then(data => setFaqs(data.result.bot.options))
